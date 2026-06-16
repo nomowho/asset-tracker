@@ -73,10 +73,36 @@
       text-transform: uppercase;
     }
     .logo em { color: var(--text-muted); font-style: normal; font-weight: 300; }
+    .hdr-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
     .hdate {
       font-size: 13px;
       letter-spacing: 0.12em;
       color: var(--text-dim);
+    }
+    .logout-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .logout-btn:hover {
+      color: var(--red);
+      border-color: rgba(239,68,68,0.4);
+      background: rgba(239,68,68,0.08);
     }
 
     /* ── HERO ───────────────────────────────────── */
@@ -543,7 +569,10 @@
   <!-- HEADER -->
   <header>
     <div class="logo">NOMO <em>//</em> ASSET TRACKER</div>
-    <div class="hdate" id="hdate"></div>
+    <div class="hdr-right">
+      <div class="hdate" id="hdate"></div>
+      <button class="logout-btn" onclick="logout()" title="登出">⏻</button>
+    </div>
   </header>
 
   <!-- HERO -->
@@ -697,6 +726,15 @@ function checkPin() {
     document.getElementById('pin-input').value = '';
     document.getElementById('pin-input').focus();
   }
+}
+
+function logout() {
+  sessionStorage.removeItem('at_unlocked');
+  document.getElementById('pin-error').textContent = '';
+  document.getElementById('pin-input').value = '';
+  document.getElementById('pin-screen').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => document.getElementById('pin-input').focus(), 100);
 }
 
 const KEY = 'nomo_asset_v2';
