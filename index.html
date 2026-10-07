@@ -442,6 +442,72 @@
     .al-pct { color: var(--text); font-weight: 600; min-width: 42px; }
     .al-amt { color: var(--text-dim); font-size: 12px; }
 
+    /* ── BACKUP ─────────────────────────────────── */
+    .bk-alert {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: rgba(245,158,11,0.08);
+      border: 1px solid rgba(245,158,11,0.4);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--amber);
+    }
+    .bk-alert.show { display: flex; }
+    .bk-alert button {
+      flex-shrink: 0;
+      background: transparent;
+      border: 1px solid var(--amber);
+      color: var(--amber);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .bk-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      margin-top: 24px;
+    }
+    .bk-btns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .bk-btn {
+      padding: 14px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: all 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .bk-btn:hover { border-color: var(--accent-border); color: var(--accent); }
+    .bk-btn.primary { border-color: var(--accent); color: var(--accent); }
+    .bk-status {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 12px;
+      line-height: 1.7;
+    }
+    .bk-status.warn { color: var(--amber); }
+
     /* ── TOAST ──────────────────────────────────── */
     .toast {
       position: fixed;
@@ -486,6 +552,7 @@
       .htbl td { font-size: 13px; padding: 13px 10px; }
       .chart-card { padding: 18px 14px 14px; }
       .alloc-wrap { flex-direction: row; }
+      .bk-alert { flex-direction: column; align-items: stretch; }
     }
 
     /* ── PIN LOCK ───────────────────────────────── */
@@ -577,6 +644,12 @@
       <button class="logout-btn" onclick="logout()" title="登出">⏻</button>
     </div>
   </header>
+
+  <!-- BACKUP REMINDER -->
+  <div class="bk-alert" id="bkAlert">
+    <span id="bkAlertText"></span>
+    <button onclick="exportBackup()">立即備份</button>
+  </div>
 
   <!-- HERO -->
   <div class="hero">
@@ -702,6 +775,17 @@
   <!-- HISTORY -->
   <div class="sec-title">History</div>
   <div id="histBox"><div class="hist-empty">尚無歷史紀錄</div></div>
+
+  <!-- BACKUP -->
+  <div class="bk-card">
+    <div class="sec-title">Backup</div>
+    <div class="bk-btns">
+      <button class="bk-btn primary" onclick="exportBackup()">⤓ 匯出備份</button>
+      <button class="bk-btn" onclick="document.getElementById('bkFile').click()">⤒ 匯入備份</button>
+    </div>
+    <input type="file" id="bkFile" style="display:none" onchange="importBackup(this)">
+    <div class="bk-status" id="bkStatus"></div>
+  </div>
 
 </div><!-- .wrap -->
 
@@ -899,6 +983,7 @@ function recordToday() {
   save(recs);
   renderChart(recs);
   renderHistory(recs);
+  updateBackupStatus();
   showToast('✓  RECORDED — ' + date);
 }
 
@@ -910,6 +995,7 @@ function del(date) {
   renderChart(recs);
   renderHistory(recs);
   updateUI();
+  updateBackupStatus();
   showToast('✓  DELETED — ' + date);
 }
 
@@ -1117,6 +1203,139 @@ function showToast(msg, ms = 2600) {
   setTimeout(() => el.classList.remove('show'), ms);
 }
 
+/* ─── Backup ────────────────────────────────────── */
+const BK_KEY = 'nomo_asset_lastbackup';
+const BK_REMIND_DAYS = 30;
+
+function daysSince(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const then = new Date(y, m - 1, d);
+  const now  = new Date(); now.setHours(0, 0, 0, 0);
+  return Math.round((now - then) / 86400000);
+}
+
+function updateBackupStatus() {
+  const recs   = load();
+  const last   = localStorage.getItem(BK_KEY);
+  const status = document.getElementById('bkStatus');
+  const alert  = document.getElementById('bkAlert');
+  const days   = last ? daysSince(last) : null;
+  const overdue = recs.length > 0 && (days === null || days >= BK_REMIND_DAYS);
+
+  const line = last
+    ? `上次備份：${last}（${days === 0 ? '今天' : days + ' 天前'}）・目前共 ${recs.length} 筆紀錄`
+    : `尚未備份過・目前共 ${recs.length} 筆紀錄`;
+  status.className = 'bk-status' + (overdue ? ' warn' : '');
+  status.innerHTML = line +
+    '<br>資料只存在這支手機的瀏覽器裡，刪掉主畫面圖示就會消失。備份檔請存到 iCloud 雲碟。';
+
+  if (overdue) {
+    document.getElementById('bkAlertText').textContent = days === null
+      ? '⚠ 還沒有任何備份。刪掉主畫面圖示，資料會跟著消失。'
+      : `⚠ 已經 ${days} 天沒備份了，建議現在存一份到 iCloud。`;
+    alert.classList.add('show');
+  } else {
+    alert.classList.remove('show');
+  }
+}
+
+function markBackedUp() {
+  localStorage.setItem(BK_KEY, today());
+  updateBackupStatus();
+  showToast('✓  BACKUP SAVED — ' + today());
+}
+
+function exportBackup() {
+  const recs = load();
+  if (recs.length === 0) { showToast('⚠  目前沒有紀錄可以備份'); return; }
+
+  const payload = {
+    app: 'nomo-asset-tracker',
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    count: recs.length,
+    records: recs
+  };
+  const name = `asset-backup-${today()}.json`;
+  const text = JSON.stringify(payload, null, 2);
+
+  /* iPhone：優先用分享表單，可直接「儲存到檔案」→ iCloud 雲碟 */
+  let file = null;
+  try { file = new File([text], name, { type: 'application/json' }); } catch {}
+  if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file], title: name })
+      .then(markBackedUp)
+      .catch(err => {
+        if (err && err.name === 'AbortError') showToast('已取消備份');
+        else downloadFile(text, name);
+      });
+    return;
+  }
+  downloadFile(text, name);
+}
+
+function downloadFile(text, name) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  markBackedUp();
+}
+
+function isValidRecord(r) {
+  return r && typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date)
+    && r.accounts && r.totals && typeof r.totals.total === 'number';
+}
+
+function importBackup(input) {
+  const f = input.files && input.files[0];
+  input.value = '';
+  if (!f) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    let incoming;
+    try {
+      const data = JSON.parse(reader.result);
+      incoming = Array.isArray(data) ? data : data.records;
+    } catch {
+      showToast('⚠  檔案格式不對，請選 asset-backup 開頭的檔案');
+      return;
+    }
+    if (!Array.isArray(incoming) || incoming.length === 0 || !incoming.every(isValidRecord)) {
+      showToast('⚠  這不是資產工具的備份檔');
+      return;
+    }
+    incoming = [...incoming].sort((a, b) => a.date.localeCompare(b.date));
+
+    const recs  = load();
+    const dates = new Set(recs.map(r => r.date));
+    const dup   = incoming.filter(r => dates.has(r.date)).length;
+    const add   = incoming.length - dup;
+    const msg = `備份檔共 ${incoming.length} 筆（${incoming[0].date} ～ ${incoming[incoming.length-1].date}）\n\n`
+      + `・新增 ${add} 筆\n・日期重複 ${dup} 筆，以備份檔為準\n・手機上其他紀錄保留不動\n\n確定匯入？`;
+    if (!confirm(msg)) return;
+
+    const merged = new Map(recs.map(r => [r.date, r]));
+    incoming.forEach(r => merged.set(r.date, r));
+    const out = [...merged.values()].sort((a, b) => a.date.localeCompare(b.date));
+    save(out);
+
+    if (recs.length === 0) fill(out[out.length - 1]);
+    updateUI();
+    renderChart(out);
+    renderHistory(out);
+    updateBackupStatus();
+    showToast(`✓  IMPORTED — ${incoming.length} 筆`);
+  };
+  reader.onerror = () => showToast('⚠  讀取檔案失敗');
+  reader.readAsText(f);
+}
+
 /* ─── Fill from record ───────────────────────────── */
 function fill(rec) {
   const a = rec.accounts;
@@ -1147,6 +1366,7 @@ function init() {
   updateUI();
   renderChart(recs);
   renderHistory(recs);
+  updateBackupStatus();
 
   /* live update on input */
   ['rate','a_y2','a_y3','a_et','a_yt','a_sp','a_ca'].forEach(id => {
